@@ -42,10 +42,10 @@ const BUILD_BRANCH: &str = match option_env!("BUILD_BRANCH") {
     None => "unknown",
 };
 
-// --- FONCTION DE SÉCURITÉ ---
+// --- FONCTION DE SÉCURITÉ CORRIGÉE ---
 async fn app_auth_validator(
-    credentials: BasicAuth,
-    req: ServiceRequest,
+    req: ServiceRequest,         // <--- La requête en premier
+    credentials: BasicAuth,      // <--- Les identifiants en deuxième
 ) -> Result<ServiceRequest, (Error, ServiceRequest)> {
     // MODIFIE ICI : Choisis ton login et ton mot de passe
     if credentials.user_id() == "admin" && credentials.password() == Some("ton_password_prowlarr") {
