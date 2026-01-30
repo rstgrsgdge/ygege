@@ -47,15 +47,17 @@ async fn app_auth_validator(
     req: ServiceRequest,
     credentials: BasicAuth,
 ) -> Result<ServiceRequest, (Error, ServiceRequest)> {
-    // On accepte soit le Basic Auth, soit une API Key dans l'URL
     let query = qstring::QString::from(req.query_string());
-    let api_key = query.get("apikey");
+    let api_key_in_url = query.get("apikey");
 
-    if (credentials.user_id() == "admin" && credentials.password() == Some("ton_password_prowlarr")) 
-       || api_key == Some("ton_password") {
+    // Remplace "ton_secret" par le mot de passe que tu veux
+    let secret = "ton_mot_de_passe_ici"; 
+
+    if api_key_in_url == Some(secret) || credentials.password() == Some(secret) {
         Ok(req)
     } else {
-        Err((actix_web::error::ErrorUnauthorized("Accès restreint"), req))
+        warn!("Tentative d'accès refusée pour l'IP: {:?}", req.peer_addr());
+        Err((actix_web::error::ErrorUnauthorized("Clé API invalide"), req))
     }
 }
 
