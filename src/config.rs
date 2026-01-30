@@ -14,7 +14,7 @@ pub fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
                 serde_json::to_writer_pretty(file, &default_config)?;
                 Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    "You need to set a valid YGG_USERNAME and YGG_PASSWORD in environment variables or edit the created config.json file.",
+                    "Veuillez configurer YGG_USERNAME, YGG_PASSWORD et API_KEY dans config.json.",
                 )))
             }
         },
@@ -27,11 +27,11 @@ fn load_config_from_json() -> Result<Config, Box<dyn std::error::Error>> {
         let reader = std::io::BufReader::new(file);
         let config: Config = serde_json::from_reader(reader)?;
         let default_config = Config::default();
-        if config.username == default_config.username || config.password == default_config.password
-        {
+        
+        if config.username == default_config.username || config.password == default_config.password {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "Please set a valid YGG_USERNAME and YGG_PASSWORD in config.json.",
+                "Veuillez définir un username et password valides dans config.json.",
             )));
         }
         Ok(config)
@@ -41,56 +41,31 @@ fn load_config_from_json() -> Result<Config, Box<dyn std::error::Error>> {
         serde_json::to_writer_pretty(file, &default_config)?;
         Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "Configuration file not found, created a default one.",
+            "Fichier config.json non trouvé, un modèle a été créé.",
         )))
     }
 }
 
 fn load_config_from_env() -> Result<Config, std::io::Error> {
-    let username = std::env::var("YGG_USERNAME").map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "YGG_USERNAME env var is undefined",
-        )
-    })?;
+    let username = std::env::var("YGG_USERNAME").map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "YGG_USERNAME non défini"))?;
+    let password = std::env::var("YGG_PASSWORD").map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "YGG_PASSWORD non défini"))?;
+    
+    // On ajoute la clé API depuis l'environnement ou une valeur par défaut "admin"
+    let api_key = std::env::var("API_KEY").unwrap_or_else(|_| "admin".to_string());
 
-    let password = std::env::var("YGG_PASSWORD").map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "YGG_PASSWORD env var is undefined",
-        )
-    })?;
+    let bind_ip = std::env::var("BIND_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let bind_port = std::env::var("BIND_PORT").unwrap_or_else(|_| "8715".to_string()).parse::<u16>().map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "BIND_PORT invalide"))?;
 
-    let bind_ip = std::env::var("BIND_IP").unwrap_or("0.0.0.0".to_string());
-
-    let bind_port = std::env::var("BIND_PORT")
-        .unwrap_or("8715".to_string())
-        .parse::<u16>()
-        .map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "BIND_PORT must be a valid number between 1 and 65535",
-            )
-        })?;
-
-    let log_level = std::env::var("LOG_LEVEL")
-        .unwrap_or("debug".to_string())
-        .parse::<LevelFilter>()
-        .map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "LOG_LEVEL must be a valid log level (off, error, warn, info, debug, trace)",
-            )
-        })?;
+    let log_level = std::env::var("LOG_LEVEL").unwrap_or_else(|_| "debug".to_string()).parse::<LevelFilter>().map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "LOG_LEVEL invalide"))?;
 
     let turbo_enabled = std::env::var("TURBO_ENABLED").ok().map(|s| s == "true");
-
     let tmdb_token = std::env::var("TMDB_TOKEN").ok();
     let ygg_domain = std::env::var("YGG_DOMAIN").ok();
 
     Ok(Config {
         username,
         password,
+        api_key,
         bind_ip,
         bind_port,
         log_level,
@@ -104,6 +79,7 @@ fn load_config_from_env() -> Result<Config, std::io::Error> {
 pub struct Config {
     pub username: String,
     pub password: String,
+    pub api_key: String, // <--- AJOUTÉ
     pub bind_ip: String,
     pub bind_port: u16,
     #[serde(with = "log_level_serde")]
@@ -118,6 +94,7 @@ impl Default for Config {
         Config {
             username: "your_ygg_username".to_string(),
             password: "your_ygg_password".to_string(),
+            api_key: "change_me_prowlarr".to_string(), // <--- AJOUTÉ
             bind_ip: "0.0.0.0".to_string(),
             bind_port: 8715,
             log_level: LevelFilter::Debug,
@@ -127,6 +104,8 @@ impl Default for Config {
         }
     }
 }
+
+// ... garde le module log_level_serde tel quel ...
 
 mod log_level_serde {
     use log::LevelFilter;
