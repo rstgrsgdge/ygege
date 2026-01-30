@@ -153,11 +153,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_clone = config.clone();
     
     HttpServer::new(move || {
-        let auth = HttpAuthentication::basic(app_auth_validator);
+        // let auth = HttpAuthentication::basic(app_auth_validator);
         App::new()
             .app_data(web::Data::new(client.clone()))
             .app_data(web::Data::new(config_clone.clone()))
-            .wrap(auth) 
+            // .wrap(auth) 
             .configure(rest::config_routes)
     })
     .bind(format!("{}:{}", config.bind_ip, config.bind_port))?
