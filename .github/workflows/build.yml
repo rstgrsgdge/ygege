@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust & Target
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-musl
@@ -18,10 +18,13 @@ jobs:
           sudo apt-get install -y musl-tools cmake build-essential
 
       - name: Build Static Binary
-        # On définit les variables directement ici pour plus de clarté
-        run: |
-          export CC=musl-gcc
-          cargo build --release --target x86_64-unknown-linux-musl
+        env:
+          # On force le compilateur musl pour le C et le C++
+          CC: musl-gcc
+          CXX: musl-gcc
+          # On indique à Rust de lier les bibliothèques C de façon statique
+          RUSTFLAGS: "-C target-feature=+crt-static"
+        run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Upload Linux Binary
         uses: actions/upload-artifact@v4
