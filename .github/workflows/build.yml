@@ -19,11 +19,12 @@ jobs:
 
       - name: Build Static Binary
         env:
-          # On force le compilateur musl pour le C et le C++
           CC: musl-gcc
           CXX: musl-gcc
-          # On indique à Rust de lier les bibliothèques C de façon statique
+          # Force le mode statique pour Rust
           RUSTFLAGS: "-C target-feature=+crt-static"
+          # Désactive l'assembleur complexe qui fait échouer BoringSSL en musl
+          BORING_BSSL_NO_ASM: 1
         run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Upload Linux Binary
