@@ -15,10 +15,10 @@ use crate::auth::{KEY, login};
 use crate::categories::init_categories;
 use crate::config::load_config;
 use crate::domain::{OWN_IP, get_own_ip, get_ygg_domain};
-use actix_web::{App, HttpServer, web, dev::ServiceRequest, Error};
-use actix_web_httpauth::middleware::HttpAuthentication;
-use actix_web_httpauth::extractors::basic::BasicAuth;
+use actix_web::{App, HttpServer, web, HttpResponse, dev::ServiceResponse};
+use actix_web::dev::Service;
 use std::sync::Mutex;
+use futures_util::future::LocalBoxFuture;
 
 extern crate pretty_env_logger;
 #[macro_use]
@@ -41,31 +41,6 @@ const BUILD_BRANCH: &str = match option_env!("BUILD_BRANCH") {
     Some(branch) => branch,
     None => "unknown",
 };
-
-// --- FONCTION DE SÉCURITÉ CORRIGÉE ---
-async fn app_auth_validator(
-    req: ServiceRequest,
-    credentials: BasicAuth,
-) -> Result<ServiceRequest, (Error, ServiceRequest)> {
-    // 1. On extrait la clé API de l'URL (?apikey=...)
-    let query = qstring::QString::from(req.query_string());
-    let api_key_in_url = query.get("apikey");
-
-    // 2. Ton mot de passe secret (doit être le même que dans Prowlarr)
-    let mon_secret = "ton_password_prowlarr"; 
-
-    // 3. On vérifie si l'un des deux est correct
-    let is_basic_auth_ok = credentials.user_id() == "admin" && credentials.password() == Some(mon_secret);
-    let is_api_key_ok = api_key_in_url == Some(mon_secret);
-
-    if is_basic_auth_ok || is_api_key_ok {
-        Ok(req)
-    } else {
-        // Optionnel : affiche dans ta console pourquoi c'est refusé
-        println!("Accès refusé. Reçu dans l'URL: {:?}, BasicAuth: {:?}", api_key_in_url, credentials.user_id());
-        Err((actix_web::error::ErrorUnauthorized("Clé API ou Login invalide"), req))
-    }
-}
 
 fn print_version() {
     println!("Ygégé v{}", VERSION);
@@ -105,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match dbs::get_account_username(tmdb_token).await {
             Ok(username) => {
                 info!("TMDB and IMDB resolver enabled");
-                info!("TMDB account username: {}", username); // <-- La parenthèse est bien là !
+                info!("TMDB account username: {}", username);
             }
             Err(e) => {
                 error!("Failed to get TMDB account username: {}", e);
@@ -152,12 +127,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config_clone = config.clone();
     
+    // Ton mot de passe de sécurité
+    let secret_key = "ton_password_prowlarr".to_string(); 
+
     HttpServer::new(move || {
-        // let auth = HttpAuthentication::basic(app_auth_validator);
+        let secret = secret_key.clone();
         App::new()
             .app_data(web::Data::new(client.clone()))
             .app_data(web::Data::new(config_clone.clone()))
-            // .wrap(auth) 
+            // MIDDLEWARE DE SÉCURITÉ FLEXIBLE
+            .wrap_fn(move |req, srv| {
+                let query = qstring::QString::from(req.query_string());
+                let api_key_in_url = query.get("apikey");
+                
+                // On vérifie si la clé API est présente et correcte
+                if api_key_in_url == Some(&secret) {
+                    let fut = srv.call(req);
+                    return Box::pin(async move {
+                        let res = fut.await?;
+                        Ok(res)
+                    }) as LocalBoxFuture<'static, Result<ServiceResponse, actix_web::Error>>;
+                }
+
+                // Sinon, on bloque avec un message 401 propre
+                Box::pin(async move {
+                    Ok(req.into_response(
+                        HttpResponse::Unauthorized()
+                            .body("Accès refusé : Clé API invalide ou manquante.")
+                    ))
+                })
+            })
             .configure(rest::config_routes)
     })
     .bind(format!("{}:{}", config.bind_ip, config.bind_port))?
