@@ -47,17 +47,23 @@ async fn app_auth_validator(
     req: ServiceRequest,
     credentials: BasicAuth,
 ) -> Result<ServiceRequest, (Error, ServiceRequest)> {
+    // 1. On extrait la clé API de l'URL (?apikey=...)
     let query = qstring::QString::from(req.query_string());
     let api_key_in_url = query.get("apikey");
 
-    // Remplace "ton_secret" par le mot de passe que tu veux
-    let secret = "ton_mot_de_passe_ici"; 
+    // 2. Ton mot de passe secret (doit être le même que dans Prowlarr)
+    let mon_secret = "ton_password_prowlarr"; 
 
-    if api_key_in_url == Some(secret) || credentials.password() == Some(secret) {
+    // 3. On vérifie si l'un des deux est correct
+    let is_basic_auth_ok = credentials.user_id() == "admin" && credentials.password() == Some(mon_secret);
+    let is_api_key_ok = api_key_in_url == Some(mon_secret);
+
+    if is_basic_auth_ok || is_api_key_ok {
         Ok(req)
     } else {
-        warn!("Tentative d'accès refusée pour l'IP: {:?}", req.peer_addr());
-        Err((actix_web::error::ErrorUnauthorized("Clé API invalide"), req))
+        // Optionnel : affiche dans ta console pourquoi c'est refusé
+        println!("Accès refusé. Reçu dans l'URL: {:?}, BasicAuth: {:?}", api_key_in_url, credentials.user_id());
+        Err((actix_web::error::ErrorUnauthorized("Clé API ou Login invalide"), req))
     }
 }
 
