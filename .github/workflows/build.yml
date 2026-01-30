@@ -1,25 +1,30 @@
-name: Build Static Binary
-on: [push, workflow_dispatch] # Permet de le lancer manuellement
+name: Linux Static Build
+on: [push, workflow_dispatch]
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust & Target
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-musl
 
-      - name: Install musl-tools
-        run: sudo apt-get install -y musl-tools
+      - name: Install Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools cmake build-essential
 
-      - name: Build
-        run: cargo build --release --target x86_64-unknown-linux-musl
+      - name: Build Static Binary
+        # On définit les variables directement ici pour plus de clarté
+        run: |
+          export CC=musl-gcc
+          cargo build --release --target x86_64-unknown-linux-musl
 
-      - name: Upload Binary
+      - name: Upload Linux Binary
         uses: actions/upload-artifact@v4
         with:
-          name: ygege-binary
+          name: ygege-linux-static
           path: target/x86_64-unknown-linux-musl/release/ygege
