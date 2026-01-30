@@ -44,11 +44,15 @@ const BUILD_BRANCH: &str = match option_env!("BUILD_BRANCH") {
 
 // --- FONCTION DE SÉCURITÉ CORRIGÉE ---
 async fn app_auth_validator(
-    req: ServiceRequest,         // <--- La requête en premier
-    credentials: BasicAuth,      // <--- Les identifiants en deuxième
+    req: ServiceRequest,
+    credentials: BasicAuth,
 ) -> Result<ServiceRequest, (Error, ServiceRequest)> {
-    // MODIFIE ICI : Choisis ton login et ton mot de passe
-    if credentials.user_id() == "admin" && credentials.password() == Some("ton_password_prowlarr") {
+    // On accepte soit le Basic Auth, soit une API Key dans l'URL
+    let query = qstring::QString::from(req.query_string());
+    let api_key = query.get("apikey");
+
+    if (credentials.user_id() == "admin" && credentials.password() == Some("ton_password_prowlarr")) 
+       || api_key == Some("ton_password") {
         Ok(req)
     } else {
         Err((actix_web::error::ErrorUnauthorized("Accès restreint"), req))
