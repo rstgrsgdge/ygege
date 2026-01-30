@@ -4,28 +4,21 @@ on: [push, workflow_dispatch]
 jobs:
   build-linux:
     runs-on: ubuntu-latest
+    # On utilise un conteneur ultra-préparé pour le statique
+    container: messense/rust-musl-cross:x86_64-musl
+    
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
-      - name: Install Build Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools cmake build-essential
-
       - name: Build Static Binary
-        env:
-          CC: musl-gcc
-          CXX: musl-gcc
-          # Force le mode statique pour Rust
-          RUSTFLAGS: "-C target-feature=+crt-static"
-          # Désactive l'assembleur complexe qui fait échouer BoringSSL en musl
-          BORING_BSSL_NO_ASM: 1
-        run: cargo build --release --target x86_64-unknown-linux-musl
+        run: |
+          # On force BoringSSL à ignorer l'assembleur (qui fait planter le build)
+          # On met toutes les variantes de noms possibles pour être sûr
+          export BORING_BSSL_NO_ASM=1
+          export BORING_NO_ASM=1
+          
+          # Compilation
+          cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Upload Linux Binary
         uses: actions/upload-artifact@v4
