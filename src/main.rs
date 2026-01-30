@@ -28,7 +28,6 @@ pub static DOMAIN: Mutex<String> = Mutex::new(String::new());
 pub const LOGIN_PAGE: &str = "/auth/login";
 pub const LOGIN_PROCESS_PAGE: &str = "/auth/process_login";
 
-// Build information from environment variables
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const BUILD_COMMIT: &str = match option_env!("BUILD_COMMIT") {
     Some(commit) => commit,
@@ -43,16 +42,16 @@ const BUILD_BRANCH: &str = match option_env!("BUILD_BRANCH") {
     None => "unknown",
 };
 
-// --- NOUVELLE FONCTION DE SÉCURITÉ ---
+// --- FONCTION DE SÉCURITÉ ---
 async fn app_auth_validator(
     credentials: BasicAuth,
     req: ServiceRequest,
 ) -> Result<ServiceRequest, (Error, ServiceRequest)> {
-    // MODIFIE ICI : Remplace 'admin' et 'ton_password_prowlarr'
+    // MODIFIE ICI : Choisis ton login et ton mot de passe
     if credentials.user_id() == "admin" && credentials.password() == Some("ton_password_prowlarr") {
         Ok(req)
     } else {
-        Err((actix_web::error::ErrorUnauthorized("Accès restreint : Identifiants invalides"), req))
+        Err((actix_web::error::ErrorUnauthorized("Accès restreint"), req))
     }
 }
 
@@ -94,4 +93,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match dbs::get_account_username(tmdb_token).await {
             Ok(username) => {
                 info!("TMDB and IMDB resolver enabled");
-                info!("TMDB account username: {}", username
+                info!("TMDB account username: {}", username); // <-- La parenthèse est bien là !
+            }
+            Err(e) => {
+                error!("Failed to get TMDB account username: {}", e);
+                config.tmdb_token = None;
+            }
+        }
+    }
+
+    let domain = match &config.ygg_domain {
+        Some(d) => {
+            info!("Using configured YGG domain: {}", d);
+            d.clone()
+        }
+        None => {
+            let d = get_ygg_domain().await;
+            match d {
+                Ok(domain) => {
+                    info!("Using detected YGG domain: {}", domain);
+                    domain
+                }
+                Err(e) => {
+                    error!("Failed to get YGG domain: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+    };
+    
+    {
+        let mut domain_lock = DOMAIN.lock().unwrap();
+        *domain_lock = domain.clone();
+    }
+
+    std::fs::create_dir_all("sessions")?;
+    let client = login(config.username.as_str(), config.password.as_str(), true).await?;
+    info!("Logged in to YGG with username: {}", config.username);
+
+    let account = user::get_account(&client).await?;
+    KEY.set(account.passkey)?;
+
+    if let Err(e) = init_categories(&client).await {
+        warn!("Failed to initialize categories cache: {}", e);
+    }
+
+    let config_clone = config.clone();
+    
+    HttpServer::new(move || {
+        let auth = HttpAuthentication::basic(app_auth_validator);
+        App::new()
+            .app_data(web::Data::new(client.clone()))
+            .app_data(web::Data::new(config_clone.clone()))
+            .wrap(auth) 
+            .configure(rest::config_routes)
+    })
+    .bind(format!("{}:{}", config.bind_ip, config.bind_port))?
+    .run()
+    .await?;
+
+    Ok(())
+}
