@@ -127,21 +127,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config_clone = config.clone();
     
-    // Ton mot de passe de sécurité
-    let secret_key = "ton_password_prowlarr".to_string(); 
-
     HttpServer::new(move || {
-        let secret = secret_key.clone();
+        let current_config = config_clone.clone(); // On clone pour le middleware
+        
         App::new()
             .app_data(web::Data::new(client.clone()))
             .app_data(web::Data::new(config_clone.clone()))
-            // MIDDLEWARE DE SÉCURITÉ FLEXIBLE
             .wrap_fn(move |req, srv| {
                 let query = qstring::QString::from(req.query_string());
                 let api_key_in_url = query.get("apikey");
                 
-                // On vérifie si la clé API est présente et correcte
-                if api_key_in_url == Some(&secret) {
+                // On compare avec la clé qui vient du config.json
+                if api_key_in_url == Some(&current_config.api_key) {
                     let fut = srv.call(req);
                     return Box::pin(async move {
                         let res = fut.await?;
@@ -149,11 +146,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }) as LocalBoxFuture<'static, Result<ServiceResponse, actix_web::Error>>;
                 }
 
-                // Sinon, on bloque avec un message 401 propre
                 Box::pin(async move {
                     Ok(req.into_response(
                         HttpResponse::Unauthorized()
-                            .body("Accès refusé : Clé API invalide ou manquante.")
+                            .body("Accès refusé : Clé API invalide.")
                     ))
                 })
             })
